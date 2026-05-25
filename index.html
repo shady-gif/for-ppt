@@ -698,7 +698,7 @@ function fetchImages(query){
         resultsLabel.classList.add('show');
         return;
       }
-      resultsLabel.textContent=`Showing top results for "${query}"`;
+     
       resultsLabel.classList.add('show');
       data.photos.forEach((photo,i)=>{
         const card=buildCard(photo,i);
