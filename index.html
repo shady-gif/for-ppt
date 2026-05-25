@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ShadyPPT — Visual Search</title>
+<style>
+/* Apple SF Pro system font stack */
+@font-face {
+  font-family: 'SF Pro Display';
+  src: local('-apple-system'), local('BlinkMacSystemFont'), local('SF Pro Display');
+}
+</style>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --gold:#c9a96e;
+  --gold-light:#e8c990;
+  --gold-dim:#8a6940;
+  --purple:#7c5cfc;
+  --purple-dim:#3d2a8a;
+  --cyan:#00d4ff;
+  --bg:#04040a;
+  --bg2:#080810;
+  --glass:rgba(255,255,255,0.04);
+  --glass-border:rgba(255,255,255,0.08);
+  --text:#f0ece4;
+  --text-muted:rgba(240,236,228,0.45);
+  --radius:20px;
+  --font-display:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",sans-serif;
+  --font-body:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;
+}
+html{scroll-behavior:smooth;cursor:none}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font-body);
+  min-height:100vh;
+  overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+
+/* ── CUSTOM CURSOR ── */
+#cursor{position:fixed;top:0;left:0;width:10px;height:10px;background:var(--gold);border-radius:50%;pointer-events:none;z-index:9999;will-change:transform;transform:translate(-50%,-50%)}
+#cursor-ring{position:fixed;top:0;left:0;width:34px;height:34px;border:1px solid rgba(201,169,110,0.35);border-radius:50%;pointer-events:none;z-index:9998;will-change:transform;transform:translate(-50%,-50%);transition:width .3s ease,height .3s ease,border-color .3s ease}
+body:has(a:hover) #cursor,body:has(button:hover) #cursor{background:var(--gold-light)}
+body:has(a:hover) #cursor-ring,body:has(button:hover) #cursor-ring{width:52px;height:52px;border-color:rgba(124,92,252,0.45)}
+
+/* ── AMBIENT CANVAS ── */
+#ambient{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.7}
+
+/* ── NOISE OVERLAY ── */
+body::before{
+  content:'';position:fixed;inset:0;z-index:1;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  opacity:.4;
+}
+
+/* ── MOUSE GLOW ── */
+#glow{
+  position:fixed;width:700px;height:700px;border-radius:50%;pointer-events:none;z-index:2;
+  background:radial-gradient(circle,rgba(201,169,110,0.06) 0%,transparent 70%);
+  transform:translate(-50%,-50%);will-change:transform;
+}
+
+/* ── NAV ── */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:20px 48px;
+  background:rgba(4,4,10,0.6);
+  backdrop-filter:blur(24px);
+  -webkit-backdrop-filter:blur(24px);
+  border-bottom:1px solid var(--glass-border);
+}
+.nav-logo{
+  font-family:var(--font-display);font-weight:700;font-size:17px;
+  background:linear-gradient(135deg,var(--gold-light),var(--gold),var(--gold-dim));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  letter-spacing:-.3px;
+}
+.nav-links{display:flex;gap:8px}
+.nav-link{
+  font-size:13px;font-weight:400;color:var(--text-muted);
+  text-decoration:none;padding:8px 16px;border-radius:100px;
+  border:1px solid transparent;transition:all .25s ease;letter-spacing:.02em;
+}
+.nav-link:hover{color:var(--text);border-color:var(--glass-border);background:var(--glass)}
+.nav-link.active{color:var(--gold);border-color:rgba(201,169,110,0.2)}
+.nav-cta{
+  font-size:13px;font-weight:500;color:var(--bg);
+  background:linear-gradient(135deg,var(--gold-light),var(--gold));
+  border:none;padding:9px 20px;border-radius:100px;cursor:none;
+  transition:all .3s ease;letter-spacing:.01em;
+}
+.nav-cta:hover{transform:scale(1.04);box-shadow:0 0 28px rgba(201,169,110,0.4)}
+
+/* ── PAGES ── */
+.page{position:relative;z-index:10;min-height:100vh;display:none}
+.page.active{display:block}
+
+/* ── PAGE 1: SEARCH ── */
+#page-search{
+  display:flex;flex-direction:column;align-items:center;
+  justify-content:center;padding-top:120px;padding-bottom:80px;
+}
+.hero{text-align:center;max-width:900px;margin:0 auto;padding:0 24px}
+
+/* hero entry animation */
+.hero-eyebrow{
+  display:inline-flex;align-items:center;gap:8px;
+  font-size:11px;font-weight:500;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--gold);background:rgba(201,169,110,0.08);border:1px solid rgba(201,169,110,0.2);
+  padding:7px 16px;border-radius:100px;margin-bottom:40px;
+  opacity:0;animation:fadeUp .8s ease .2s forwards;
+}
+.hero-eyebrow::before{content:'';width:6px;height:6px;background:var(--gold);border-radius:50%;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(0.7)}}
+
+.hero-title{
+  font-family:var(--font-display);
+  font-size:clamp(40px,6vw,76px);
+  font-weight:700;
+  line-height:.98;
+  letter-spacing:-2px;
+  margin-bottom:28px;
+  opacity:0;animation:fadeUp .9s ease .35s forwards;
+}
+.hero-title .line1{display:block;color:var(--text)}
+.hero-title .line2{
+  display:block;
+  background:linear-gradient(135deg,var(--gold-light) 0%,var(--gold) 40%,var(--purple) 70%,var(--cyan) 100%);
+  background-size:300% 300%;
+  animation:gradFlow 5s ease infinite,fadeUp .9s ease .35s forwards;
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+@keyframes gradFlow{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+
+.hero-sub{
+  font-size:clamp(14px,1.8vw,17px);font-weight:300;color:var(--text-muted);
+  line-height:1.75;max-width:480px;margin:0 auto 56px;
+  letter-spacing:.01em;
+  opacity:0;animation:fadeUp .9s ease .5s forwards;
+}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(32px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── SEARCH BAR ── */
+.search-wrap{
+  width:100%;max-width:680px;margin:0 auto;
+  opacity:0;animation:fadeUp .9s ease .65s forwards;
+}
+.search-box{
+  display:flex;align-items:center;gap:0;
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.1);
+  border-radius:100px;
+  padding:8px 8px 8px 28px;
+  backdrop-filter:blur(24px);
+  -webkit-backdrop-filter:blur(24px);
+  transition:all .4s ease;
+  position:relative;
+  overflow:hidden;
+}
+.search-box::before{
+  content:'';position:absolute;inset:0;border-radius:100px;
+  background:linear-gradient(135deg,rgba(201,169,110,0.0),rgba(201,169,110,0.0));
+  transition:background .4s ease;
+}
+.search-box:focus-within{
+  border-color:rgba(201,169,110,0.4);
+  box-shadow:0 0 0 4px rgba(201,169,110,0.06),0 0 60px rgba(201,169,110,0.08);
+}
+.search-box:focus-within::before{
+  background:linear-gradient(135deg,rgba(201,169,110,0.04),rgba(124,92,252,0.04));
+}
+.search-icon{font-size:18px;color:var(--gold-dim);margin-right:12px;flex-shrink:0}
+.search-input{
+  flex:1;background:none;border:none;outline:none;
+  font-family:var(--font-body);font-size:16px;font-weight:400;
+  color:var(--text);caret-color:var(--gold);
+  letter-spacing:.01em;
+}
+.search-input::placeholder{color:rgba(240,236,228,0.3)}
+.word-counter{
+  font-size:12px;color:var(--text-muted);margin:0 16px;
+  white-space:nowrap;transition:color .2s ease;
+}
+.word-counter.warn{color:var(--gold)}
+.word-counter.error{color:#ff6b6b}
+.search-btn{
+  background:linear-gradient(135deg,var(--gold-light),var(--gold));
+  border:none;color:var(--bg);
+  font-family:var(--font-display);font-weight:600;font-size:14px;
+  padding:14px 28px;border-radius:100px;cursor:none;
+  transition:all .3s cubic-bezier(.23,1,.32,1);letter-spacing:.01em;
+  flex-shrink:0;white-space:nowrap;
+}
+.search-btn:hover{
+  transform:scale(1.04);
+  box-shadow:0 0 40px rgba(201,169,110,0.5);
+}
+.search-btn:active{transform:scale(.97)}
+
+/* error toast */
+.search-error{
+  margin-top:16px;text-align:center;font-size:13px;
+  color:#ff8a8a;background:rgba(255,80,80,0.08);border:1px solid rgba(255,80,80,0.15);
+  border-radius:100px;padding:10px 24px;
+  opacity:0;transform:translateY(8px);
+  transition:all .35s cubic-bezier(.23,1,.32,1);
+  pointer-events:none;
+}
+.search-error.show{opacity:1;transform:translateY(0)}
+
+/* ── RESULTS ── */
+.results-section{
+  width:100%;max-width:1100px;margin:64px auto 0;
+  padding:0 24px;
+}
+.results-label{
+  font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--text-muted);margin-bottom:24px;padding-left:4px;
+  opacity:0;transition:opacity .4s ease;
+}
+.results-label.show{opacity:1}
+.results-grid{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:16px;
+}
+@media(max-width:768px){.results-grid{grid-template-columns:1fr}}
+
+/* shimmer */
+.shimmer-card{
+  border-radius:var(--radius);overflow:hidden;
+  background:var(--glass);border:1px solid var(--glass-border);
+  aspect-ratio:4/3;
+  background:linear-gradient(90deg,rgba(255,255,255,0.03) 25%,rgba(255,255,255,0.07) 50%,rgba(255,255,255,0.03) 75%);
+  background-size:200% 100%;
+  animation:shimmer 1.4s ease infinite;
+}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* image cards */
+.img-card{
+  position:relative;border-radius:var(--radius);overflow:hidden;
+  border:1px solid var(--glass-border);
+  aspect-ratio:4/3;cursor:none;
+  opacity:0;transform:translateY(24px) scale(.98);
+  transition:all .5s cubic-bezier(.23,1,.32,1);
+  group:hover;
+}
+.img-card.loaded{opacity:1;transform:translateY(0) scale(1)}
+.img-card:hover{
+  transform:translateY(-4px) scale(1.02);
+  border-color:rgba(201,169,110,0.25);
+  box-shadow:0 24px 64px rgba(0,0,0,0.5),0 0 0 1px rgba(201,169,110,0.1),inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.img-card img{
+  width:100%;height:100%;object-fit:cover;
+  transition:transform .6s cubic-bezier(.23,1,.32,1);display:block;
+}
+.img-card:hover img{transform:scale(1.06)}
+.img-overlay{
+  position:absolute;inset:0;
+  background:linear-gradient(to top,rgba(4,4,10,0.75) 0%,transparent 50%);
+  opacity:0;transition:opacity .4s ease;
+}
+.img-card:hover .img-overlay{opacity:1}
+.img-meta{
+  position:absolute;bottom:0;left:0;right:0;padding:20px;
+  transform:translateY(8px);transition:transform .4s cubic-bezier(.23,1,.32,1);
+  opacity:0;
+}
+.img-card:hover .img-meta{opacity:1;transform:translateY(0)}
+.img-credit{font-size:11px;color:rgba(240,236,228,.55);margin-bottom:10px}
+.dl-btn{
+  display:inline-flex;align-items:center;gap:7px;
+  background:rgba(255,255,255,0.12);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border:1px solid rgba(255,255,255,0.18);color:var(--text);
+  font-family:var(--font-display);font-weight:600;font-size:12px;letter-spacing:.04em;text-transform:uppercase;
+  padding:9px 18px;border-radius:100px;cursor:none;
+  text-decoration:none;transition:all .3s ease;
+}
+.dl-btn:hover{
+  background:rgba(201,169,110,0.2);border-color:rgba(201,169,110,0.4);
+  box-shadow:0 0 24px rgba(201,169,110,0.25);transform:scale(1.04);
+}
+.dl-btn svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
+
+/* ── PAGE 2: FEEDBACK ── */
+#page-feedback{
+  min-height:100vh;
+  display:none;
+  align-items:center;justify-content:center;
+  padding:120px 24px 80px;
+  flex-direction:column;
+}
+#page-feedback.active{display:flex}
+
+.fb-wrap{max-width:620px;width:100%;margin:0 auto}
+.fb-eyebrow{
+  display:inline-flex;align-items:center;gap:8px;
+  font-size:11px;font-weight:500;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--purple);background:rgba(124,92,252,0.08);border:1px solid rgba(124,92,252,0.2);
+  padding:7px 16px;border-radius:100px;margin-bottom:36px;
+}
+.fb-title{
+  font-family:var(--font-display);font-size:clamp(34px,5vw,56px);
+  font-weight:700;line-height:.98;letter-spacing:-1.5px;margin-bottom:16px;
+}
+.fb-title span{
+  background:linear-gradient(135deg,var(--text) 0%,var(--purple) 50%,var(--cyan) 100%);
+  background-size:200% 200%;animation:gradFlow 4s ease infinite;
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.fb-sub{font-size:15px;color:var(--text-muted);font-weight:300;margin-bottom:48px;line-height:1.7}
+
+/* form glass card */
+.fb-form-card{
+  background:rgba(255,255,255,0.03);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:28px;padding:40px;
+  backdrop-filter:blur(32px);-webkit-backdrop-filter:blur(32px);
+  position:relative;overflow:hidden;
+}
+.fb-form-card::before{
+  content:'';position:absolute;inset:-1px;border-radius:29px;
+  background:linear-gradient(135deg,rgba(124,92,252,0.15),rgba(0,212,255,0.05),rgba(201,169,110,0.1));
+  z-index:-1;
+  mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+  mask-composite:exclude;
+  -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+  -webkit-mask-composite:xor;
+  padding:1px;
+  animation:borderSpin 6s linear infinite;
+}
+@keyframes borderSpin{
+  0%{background:linear-gradient(135deg,rgba(124,92,252,0.25),rgba(0,212,255,0.08),rgba(201,169,110,0.15))}
+  33%{background:linear-gradient(225deg,rgba(201,169,110,0.25),rgba(124,92,252,0.08),rgba(0,212,255,0.15))}
+  66%{background:linear-gradient(315deg,rgba(0,212,255,0.25),rgba(201,169,110,0.08),rgba(124,92,252,0.15))}
+  100%{background:linear-gradient(135deg,rgba(124,92,252,0.25),rgba(0,212,255,0.08),rgba(201,169,110,0.15))}
+}
+
+.fb-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+@media(max-width:600px){.fb-row{grid-template-columns:1fr}}
+.fb-field{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+.fb-label{
+  font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--text-muted);font-weight:500;
+}
+.fb-input,.fb-textarea{
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:14px;padding:14px 18px;
+  font-family:var(--font-body);font-size:15px;font-weight:400;
+  color:var(--text);outline:none;
+  transition:all .35s cubic-bezier(.23,1,.32,1);
+  caret-color:var(--purple);
+}
+.fb-input::placeholder,.fb-textarea::placeholder{color:rgba(240,236,228,0.2)}
+.fb-input:focus,.fb-textarea:focus{
+  border-color:rgba(124,92,252,0.4);
+  background:rgba(124,92,252,0.05);
+  box-shadow:0 0 0 4px rgba(124,92,252,0.08),0 0 40px rgba(124,92,252,0.06);
+}
+.fb-textarea{resize:none;height:140px;line-height:1.6}
+.fb-submit{
+  width:100%;margin-top:8px;
+  background:linear-gradient(135deg,var(--purple),#9b6dff,var(--purple-dim));
+  background-size:200% 200%;
+  border:none;color:#fff;
+  font-family:var(--font-display);font-weight:600;font-size:15px;letter-spacing:.02em;
+  padding:18px;border-radius:14px;cursor:none;
+  transition:all .4s cubic-bezier(.23,1,.32,1);
+  position:relative;overflow:hidden;
+}
+.fb-submit::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(255,255,255,0.12),transparent);
+  opacity:0;transition:opacity .3s ease;
+}
+.fb-submit:hover::before{opacity:1}
+.fb-submit:hover{
+  transform:translateY(-2px) scale(1.01);
+  box-shadow:0 12px 48px rgba(124,92,252,0.45),0 0 0 1px rgba(255,255,255,0.1);
+  background-position:100% 50%;
+}
+.fb-submit:active{transform:scale(.98);box-shadow:none}
+
+/* success state */
+.fb-success{
+  text-align:center;padding:40px;
+  opacity:0;pointer-events:none;position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  transition:opacity .5s ease;
+}
+.fb-success.show{opacity:1;pointer-events:all}
+.fb-success-icon{
+  width:64px;height:64px;border-radius:50%;
+  background:linear-gradient(135deg,rgba(124,92,252,0.2),rgba(0,212,255,0.2));
+  border:1px solid rgba(124,92,252,0.3);
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 20px;font-size:24px;
+  animation:successPop .5s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes successPop{from{transform:scale(0)}to{transform:scale(1)}}
+.fb-success h3{font-family:var(--font-display);font-size:22px;font-weight:600;margin-bottom:8px}
+.fb-success p{color:var(--text-muted);font-size:14px}
+
+/* ── FOOTER ── */
+footer{
+  position:relative;z-index:10;text-align:center;padding:40px 24px;
+  border-top:1px solid var(--glass-border);
+  color:var(--text-muted);font-size:12px;letter-spacing:.04em;
+}
+footer a{color:var(--gold-dim);text-decoration:none;transition:color .2s}
+footer a:hover{color:var(--gold)}
+
+/* ── PARTICLES ── */
+.particle{
+  position:fixed;border-radius:50%;pointer-events:none;z-index:1;
+  background:var(--gold);opacity:0;
+  animation:floatPart linear infinite;
+}
+@keyframes floatPart{
+  0%{transform:translateY(100vh) rotate(0deg);opacity:0}
+  10%{opacity:.5}
+  90%{opacity:.2}
+  100%{transform:translateY(-100px) rotate(720deg);opacity:0}
+}
+
+/* ── MOBILE NAV ── */
+@media(max-width:640px){
+  nav{padding:16px 20px}
+  .nav-links{display:none}
+  #page-search{padding-top:100px}
+  .results-grid{grid-template-columns:1fr 1fr}
+  .fb-form-card{padding:24px}
+}
+</style>
+</head>
+<body>
+
+<!-- Cursor -->
+<div id="cursor"></div>
+<div id="cursor-ring"></div>
+
+<!-- Mouse glow -->
+<div id="glow"></div>
+
+<!-- Ambient canvas -->
+<canvas id="ambient"></canvas>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">ShadyPPT</div>
+
+</nav>
+
+<!-- PAGE 1: SEARCH -->
+<div class="page active" id="page-search">
+  <div id="hero-section">
+    <div class="hero">
+      <div class="hero-eyebrow">
+        <span></span>Visual Inspiration Engine
+      </div>
+      <h1 class="hero-title">
+        <span class="line1">Get cinema-grade</span>
+        <span class="line2">Visuals in 3 words.</span>
+      </h1>
+      <p class="hero-sub"></p>
+
+      <div class="search-wrap">
+        <div class="search-box" id="searchBox">
+          <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input
+            type="text"
+            class="search-input"
+            id="searchInput"
+            style="position: relative; z-index: 9999;"
+            placeholder="dark minimal office…"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <span class="word-counter" id="wordCounter">0/3</span>
+          <button class="search-btn" id="searchBtn">Search</button>
+        </div>
+        <div class="search-error" id="searchError">Maximum 3 words only — keep it precise.</div>
+      </div>
+    </div>
+
+    <div class="results-section" id="resultsSection">
+      <div class="results-label" id="resultsLabel"></div>
+      <div class="results-grid" id="resultsGrid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 2: FEEDBACK -->
+<div class="page" id="page-feedback">
+  <div class="fb-wrap">
+    <div class="fb-eyebrow">
+      <span>◈</span> Get in touch
+    </div>
+    <h2 class="fb-title"><span>Tell us everything.</span></h2>
+    <p class="fb-sub">What should ShadyPPT become? Every word matters.</p>
+
+    <div class="fb-form-card" style="position:relative">
+      <form id="fbForm" style="position:relative;z-index:1">
+        <div class="fb-row">
+          <div class="fb-field">
+            <label class="fb-label">Name</label>
+            <input class="fb-input" type="text" id="fbName" placeholder="Your name" required>
+          </div>
+          <div class="fb-field">
+            <label class="fb-label">Email</label>
+            <input class="fb-input" type="email" id="fbEmail" placeholder="you@email.com" required>
+          </div>
+        </div>
+        <div class="fb-field">
+          <label class="fb-label">Your thoughts</label>
+          <textarea class="fb-textarea" id="fbMsg" placeholder="What do you love, hate, or want? Be ruthless." required></textarea>
+        </div>
+        <button type="submit" class="fb-submit" id="fbSubmit">Send it →</button>
+      </form>
+
+      <div class="fb-success" id="fbSuccess">
+        <div class="fb-success-icon">✓</div>
+        <h3>Received. Thank you.</h3>
+        <p>Your feedback shapes what ShadyPPT becomes.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <p>© 2025 ShadyPPT · <a href="https://shadyppt.vercel.app" target="_blank">shadyppt.vercel.app</a> · Built different.</p>
+</footer>
+
+<script>
+// ── CURSOR — all three elements lerped, no instant snap ──
+const cursor=document.getElementById('cursor');
+const ring=document.getElementById('cursor-ring');
+const glow=document.getElementById('glow');
+
+let mx=window.innerWidth/2, my=window.innerHeight/2;
+// separate lerp targets for each layer
+let cx=mx,cy=my;   // cursor dot — fastest
+let rx=mx,ry=my;   // ring — medium
+let glx=mx,gly=my; // glow — slowest
+
+document.addEventListener('mousemove',e=>{
+  mx=e.clientX; my=e.clientY;
+});
+
+function lerp(a,b,t){ return a+(b-a)*t; }
+
+function animCursor(){
+  // cursor dot: very responsive but still smooth
+  cx=lerp(cx,mx,0.18);
+  cy=lerp(cy,my,0.18);
+  cursor.style.transform=`translate(${cx}px,${cy}px) translate(-50%,-50%)`;
+
+  // ring: medium lag — elegant follow
+  rx=lerp(rx,mx,0.09);
+  ry=lerp(ry,my,0.09);
+  ring.style.transform=`translate(${rx}px,${ry}px) translate(-50%,-50%)`;
+
+  // glow: slowest — ambient, dreamy trail
+  glx=lerp(glx,mx,0.055);
+  gly=lerp(gly,my,0.055);
+  glow.style.transform=`translate(${glx}px,${gly}px) translate(-50%,-50%)`;
+
+  requestAnimationFrame(animCursor);
+}
+animCursor();
+
+// ── AMBIENT CANVAS ──
+const canvas=document.getElementById('ambient');
+const ctx=canvas.getContext('2d');
+let W,H,t=0;
+function resizeCanvas(){
+  W=canvas.width=window.innerWidth;
+  H=canvas.height=window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize',resizeCanvas);
+
+const orbs=[
+  {x:.15,y:.25,r:.45,hue:45,sat:70,lit:30},
+  {x:.85,y:.2,r:.4,hue:260,sat:80,lit:25},
+  {x:.5,y:.8,r:.5,hue:195,sat:70,lit:20},
+  {x:.7,y:.6,r:.35,hue:45,sat:60,lit:15},
+];
+function drawAmbient(){
+  ctx.clearRect(0,0,W,H);
+  t+=.004;
+  orbs.forEach((o,i)=>{
+    const px=(o.x+Math.sin(t+i*.7)*.08)*W;
+    const py=(o.y+Math.cos(t+i*.5)*.06)*H;
+    const r=o.r*Math.max(W,H);
+    const grad=ctx.createRadialGradient(px,py,0,px,py,r);
+    grad.addColorStop(0,`hsla(${o.hue},${o.sat}%,${o.lit}%,0.55)`);
+    grad.addColorStop(1,`hsla(${o.hue},${o.sat}%,${o.lit}%,0)`);
+    ctx.fillStyle=grad;ctx.fillRect(0,0,W,H);
+  });
+  requestAnimationFrame(drawAmbient);
+}
+drawAmbient();
+
+// ── PARTICLES ──
+const PCOUNT=18;
+for(let i=0;i<PCOUNT;i++){
+  const p=document.createElement('div');
+  p.className='particle';
+  const sz=Math.random()*2+1;
+  p.style.cssText=`
+    left:${Math.random()*100}%;
+    width:${sz}px;height:${sz}px;
+    animation-duration:${12+Math.random()*18}s;
+    animation-delay:${-Math.random()*20}s;
+    opacity:${Math.random()*.4};
+    background:${Math.random()>.5?'rgba(201,169,110,0.6)':'rgba(124,92,252,0.5)'};
+  `;
+  document.body.appendChild(p);
+}
+
+// ── PAGE SWITCHING ──
+function showPage(name){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  document.querySelectorAll('.nav-link').forEach(l=>l.classList.remove('active'));
+  if(name==='search') document.getElementById('nav-search').classList.add('active');
+  if(name==='feedback') document.getElementById('nav-feedback').classList.add('active');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// ── SEARCH LOGIC ──
+// Replace with your Pexels API key from https://www.pexels.com/api/
+const PEXELS_KEY='EK0LPBx20C7yHzkfyjd9S66urVF0L4ZH3sCJ3NUnLNw5ILbdPOjMIGQ6';
+const searchInput=document.getElementById('searchInput');
+const wordCounter=document.getElementById('wordCounter');
+const searchBtn=document.getElementById('searchBtn');
+const searchError=document.getElementById('searchError');
+const resultsGrid=document.getElementById('resultsGrid');
+const resultsLabel=document.getElementById('resultsLabel');
+
+searchInput.addEventListener('input',()=>{
+  const words=searchInput.value.trim().split(/\s+/).filter(Boolean);
+  const n=Math.min(words.length,searchInput.value.trim()===''?0:words.length);
+  wordCounter.textContent=`${n}/3`;
+  wordCounter.className='word-counter'+(n>=3?' warn':'');
+  if(searchError.classList.contains('show')&&n<=3){
+    searchError.classList.remove('show');
+  }
+});
+
+searchInput.addEventListener('keydown',e=>{
+  if(e.key==='Enter') doSearch();
+});
+searchBtn.addEventListener('click',doSearch);
+
+function doSearch(){
+  const query=searchInput.value.trim();
+  if(!query) return;
+  const words=query.split(/\s+/).filter(Boolean);
+  if(words.length>3){
+    searchError.classList.add('show');
+    wordCounter.className='word-counter error';
+    return;
+  }
+  searchError.classList.remove('show');
+  fetchImages(query);
+}
+
+function fetchImages(query){
+  resultsGrid.innerHTML='';
+  resultsLabel.textContent='';
+  resultsLabel.classList.remove('show');
+
+  // show 3 shimmer cards
+  for(let i=0;i<3;i++){
+    const s=document.createElement('div');
+    s.className='shimmer-card';
+    resultsGrid.appendChild(s);
+  }
+
+  const url=`https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=3&orientation=landscape`;
+  fetch(url,{headers:{Authorization:PEXELS_KEY}})
+    .then(r=>r.json())
+    .then(data=>{
+      resultsGrid.innerHTML='';
+      if(!data.photos||data.photos.length===0){
+        resultsLabel.textContent='No visuals found. Try different words.';
+        resultsLabel.classList.add('show');
+        return;
+      }
+      resultsLabel.textContent=`Showing top results for "${query}"`;
+      resultsLabel.classList.add('show');
+      data.photos.forEach((photo,i)=>{
+        const card=buildCard(photo,i);
+        resultsGrid.appendChild(card);
+        setTimeout(()=>card.classList.add('loaded'),80*(i+1));
+      });
+    })
+    .catch(()=>{
+      resultsGrid.innerHTML='';
+      resultsLabel.textContent='Something went wrong. Check your connection.';
+      resultsLabel.classList.add('show');
+    });
+}
+
+function buildCard(photo,idx){
+  const card=document.createElement('div');
+  card.className='img-card';
+  const photographer=photo.photographer||'Unknown';
+  const largeUrl=photo.src.large2x||photo.src.large||photo.src.original;
+  const previewUrl=photo.src.large||photo.src.medium;
+
+  card.innerHTML=`
+    <img src="${previewUrl}" alt="${photo.alt||'photo'}" loading="lazy">
+    <div class="img-overlay"></div>
+    <div class="img-meta">
+      <div class="img-credit">Photo by ${photographer} · Pexels</div>
+      <a class="dl-btn" href="${largeUrl}" download target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24"><path d="M12 16l-6-6h4V4h4v6h4l-6 6z"/><line x1="4" y1="20" x2="20" y2="20"/></svg>
+        Download
+      </a>
+    </div>
+  `;
+
+  // tilt effect
+  card.addEventListener('mousemove',e=>{
+    const r=card.getBoundingClientRect();
+    const x=((e.clientX-r.left)/r.width-.5)*12;
+    const y=((e.clientY-r.top)/r.height-.5)*-12;
+    card.style.transform=`translateY(-4px) scale(1.02) perspective(800px) rotateX(${y}deg) rotateY(${x}deg)`;
+  });
+  card.addEventListener('mouseleave',()=>{
+    card.style.transform='translateY(0) scale(1) perspective(800px) rotateX(0) rotateY(0)';
+  });
+
+  return card;
+}
+
+// ── FEEDBACK FORM ──
+document.getElementById('fbForm').addEventListener('submit',function(e){
+  e.preventDefault();
+  const btn=document.getElementById('fbSubmit');
+  btn.textContent='Sending…';
+  btn.disabled=true;
+  setTimeout(()=>{
+    document.getElementById('fbForm').style.opacity='0';
+    document.getElementById('fbForm').style.transform='translateY(-12px)';
+    document.getElementById('fbForm').style.transition='all .4s ease';
+    setTimeout(()=>{
+      document.getElementById('fbSuccess').classList.add('show');
+    },350);
+  },1200);
+});
+</script>
+<script>
+
+const searchInput = document.getElementById("searchInput");
+
+const searchBtn = document.getElementById("searchBtn");
+
+const resultsGrid = document.getElementById("resultsGrid");
+
+async function searchImages() {
+
+  const query = searchInput.value.trim();
+
+  const words = query.split(/\s+/);
+
+  if (words.length > 3) {
+
+    document.getElementById("searchError").style.display = "block";
+
+    return;
+
+  }
+
+  document.getElementById("searchError").style.display = "none";
+
+  resultsGrid.innerHTML = `
+
+    <div style="color:white;">
+
+      Searching premium visuals...
+
+    </div>
+
+  `;
+
+  const response = await fetch(
+
+    `https://api.pexels.com/v1/search?query=${query}&per_page=3`,
+
+    {
+
+      headers: {
+
+        Authorization: "YOUR_PEXELS_API_KEY"
+
+      }
+
+    }
+
+  );
+
+  const data = await response.json();
+
+  resultsGrid.innerHTML = "";
+
+  data.photos.forEach(photo => {
+
+    const card = document.createElement("div");
+
+    card.className = "result-card";
+
+    card.innerHTML = `
+
+      <img
+
+        src="${photo.src.large}"
+
+        style="
+
+          width:100%;
+
+          height:320px;
+
+          object-fit:cover;
+
+          border-radius:24px;
+
+        "
+
+      />
+
+      <a
+
+        href="${photo.src.original}"
+
+        target="_blank"
+
+        download
+
+        style="
+
+          display:block;
+
+          margin-top:14px;
+
+          text-align:center;
+
+          padding:14px;
+
+          border-radius:16px;
+
+          background:rgba(255,255,255,0.08);
+
+          color:white;
+
+          text-decoration:none;
+
+          transition:0.3s ease;
+
+        "
+
+      >
+
+        Download
+
+      </a>
+
+    `;
+
+    resultsGrid.appendChild(card);
+
+  });
+
+}
+
+searchBtn.addEventListener("click", searchImages);
+
+searchInput.addEventListener("keypress", function(event) {
+
+  if (event.key === "Enter") {
+
+    searchImages();
+
+  }
+
+});
+
+</script>
+</body>
+</html>
