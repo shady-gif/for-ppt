@@ -167,6 +167,15 @@ nav{
   content:'';position:absolute;inset:0;border-radius:100px;
   background:linear-gradient(135deg,rgba(201,169,110,0.0),rgba(201,169,110,0.0));
   transition:background .4s ease;
+  pointer-events:none;
+  z-index:0;
+}
+.search-icon,
+.search-input,
+.word-counter,
+.search-btn{
+  position:relative;
+  z-index:1;
 }
 .search-box:focus-within{
   border-color:rgba(201,169,110,0.4);
